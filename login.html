@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GMS — Login</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="login.css">
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">Signing you in…</div>
+</div>
+
+<div class="card">
+  <div class="icon">G</div>
+  <h1>Grade Monitoring System</h1>
+  <p>Sign in to manage students and grades</p>
+
+  <!-- Real Google Sign-In Button -->
+  <div id="googleBtnWrapper">
+    <div id="g_id_onload"
+      data-client_id="287734163767-mnm5q2opeeq8ktnurifrn9evef3nnrmq.apps.googleusercontent.com"
+      data-context="signin"
+      data-ux_mode="popup"
+      data-callback="handleCredentialResponse"
+      data-auto_prompt="false">
+    </div>
+    <div class="g_id_signin"
+      data-type="standard"
+      data-shape="rectangular"
+      data-theme="outline"
+      data-text="continue_with"
+      data-size="large"
+      data-logo_alignment="left"
+      data-width="340">
+    </div>
+  </div>
+
+  <div class="error-msg" id="errorMsg">⚠️ Sign-in failed. Please try again.</div>
+  <div class="note">For authorized users only.</div>
+</div>
+
+<script>
+  // If already logged in, skip to GMS
+  if (sessionStorage.getItem('gms_auth')) {
+    window.location.href = 'grade-monitoring.html';
+  }
+
+  // Called by Google after successful sign-in
+  function handleCredentialResponse(response) {
+    try {
+      // Decode JWT token from Google
+      const base64Url = response.credential.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64).split('').map(c =>
+          '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+        ).join('')
+      );
+
+      const user = JSON.parse(jsonPayload);
+
+      document.getElementById('loading').classList.add('show');
+      document.getElementById('errorMsg').classList.remove('show');
+
+      // Save real Google user to sessionStorage
+      sessionStorage.setItem('gms_auth', JSON.stringify({
+        name: user.name,
+        email: user.email,
+        picture: user.picture || '',
+        initials: user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
+        loggedIn: true,
+        loginTime: new Date().toISOString()
+      }));
+
+  sessionStorage.setItem('gms_sheet', JSON.stringify({
+  sheetId: '1xsgj3iOgkBayh8QHis5f4XKphaXqnXuZFO-KAi2NOb0',
+  course: 'BSIT',
+  section: 'Block 1',
+  subject: ''
+}));
+      
+
+      setTimeout(() => {
+        window.location.href = 'grades-monitoring.html';
+      }, 1000);
+
+    } catch (err) {
+      document.getElementById('errorMsg').classList.add('show');
+      document.getElementById('errorMsg').textContent = '⚠️ Sign-in failed: ' + err.message;
+      console.error('Login error:', err);
+    }
+  }
+</script>
+</body>
+</html>

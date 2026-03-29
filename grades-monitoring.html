@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grade Monitoring System</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="grade-monitoring.css">
+</head>
+<body>
+  
+
+<!-- Auth Guard Overlay -->
+<div id="authGuard">
+  <div class="auth-spinner"></div>
+  <p>Checking authentication…</p>
+  <a href="login.html">← Back to Login</a>
+</div>
+
+<header class="app-header">
+  <div class="app-icon">G</div>
+  <div>
+    <div class="app-title">Grade Monitoring System</div>
+    <div class="app-subtitle">Synced with Google Sheets</div>
+  </div>
+  <div class="header-right">
+    <div class="sync-badge" id="syncBadge" style="display:none">
+      <span class="sync-dot"></span> Connected
+    </div>
+    <div class="user-chip" id="userChip" style="display:none">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <span class="user-name" id="userName">User</span>
+      <span style="color:var(--border)">·</span>
+      <span id="userEmail" style="font-size:11px"></span>
+    </div>
+    <button class="logout-btn" id="logoutBtn" style="display:none" onclick="logout()">Sign Out</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('setup')">Sheet Setup</button>
+  <button class="tab" onclick="switchTab('gradebook')">Gradebook</button>
+  <button class="tab" onclick="switchTab('ai')">AI Assistant</button>
+  <button class="tab" onclick="switchTab('log')">Sync Log</button>
+</div>
+
+<div class="main">
+  <div id="alertBox" class="hidden"></div>
+
+  <!-- SHEET SETUP -->
+  <div id="panel-setup" class="tab-panel active">
+    <div class="card">
+      <div class="card-title">Google Sheets Connection</div>
+      <div class="field"><label>Google Sheets API Key</label><input type="password" id="apiKey" placeholder="AIza..." autocomplete="off"></div>
+      <div class="field"><label>Spreadsheet ID <span style="color:var(--muted)">(from the Sheet URL)</span></label><input type="text" id="sheetId" placeholder="1xsgj3iOgkBayh8QHis5f4XK..."></div>
+      <div class="field-row">
+        <div class="field"><label>Course</label>
+          <select id="course"><option>BSIT</option><option>BSCS</option><option>BSIS</option><option>BTVTED</option><option>BSA</option><option>BSBA</option><option>BPA</option><option>BSE</option></select>
+        </div>
+        <div class="field"><label>Block</label>
+          <select id="section"><option>Block 1</option><option>Block 2</option><option>Block 3</option><option>Block 4</option><option>Block 5</option></select>
+        </div>
+      </div>
+      <div class="field"><label>Subject</label><input type="text" id="subject" placeholder="e.g. Algorithms"></div>
+      <div class="actions">
+        <button class="btn btn-secondary" onclick="testConnection()">Test Connection</button>
+        <button class="btn btn-primary" id="connectBtn" onclick="connectSheet()">Create &amp; Connect Sheet</button>
+      </div>
+    </div>
+    <div id="connectedInfo" class="hidden connected-info">
+      <span class="dot"></span>
+      <div><div class="label">Connected Sheet</div><div class="val" id="connectedLabel"></div></div>
+      <button class="btn btn-sm btn-danger" style="margin-left:auto" onclick="disconnect()">Disconnect</button>
+    </div>
+    <div class="card" id="setupHelp">
+      <div class="card-title">Setup Guide</div>
+      <ol style="line-height:2;color:var(--muted);padding-left:18px;font-size:13px">
+        <li>Go to <a href="https://console.cloud.google.com" target="_blank" style="color:var(--accent)">Google Cloud Console</a> and create a project</li>
+        <li>Enable the <strong style="color:var(--text)">Google Sheets API</strong></li>
+        <li>Create an <strong style="color:var(--text)">API Key</strong> under Credentials</li>
+        <li>Create a Google Sheet and copy its ID from the URL</li>
+        <li>Share the sheet with <strong style="color:var(--text)">"Anyone with the link can edit"</strong></li>
+        <li>Paste the API key and Spreadsheet ID above, then click Connect</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- GRADEBOOK -->
+  <div id="panel-gradebook" class="tab-panel">
+    <div id="notConnectedMsg" class="alert info">📋 Connect a Google Sheet first in the <strong>Sheet Setup</strong> tab.</div>
+    <div id="gradebookContent" class="hidden">
+      <div class="stats-row">
+        <div class="stat-card accent"><div class="stat-val" id="statTotal">0</div><div class="stat-label">Students</div></div>
+        <div class="stat-card green"><div class="stat-val" id="statAvg">—</div><div class="stat-label">Class Average</div></div>
+        <div class="stat-card warn"><div class="stat-val" id="statPassing">0</div><div class="stat-label">Passing</div></div>
+        <div class="stat-card red"><div class="stat-val" id="statFailing">0</div><div class="stat-label">Failing / INC</div></div>
+      </div>
+      <div class="weights-row">
+        <div class="weight-card"><div class="weight-label">Quizzes</div><div class="weight-val" style="color:#b89fff">10%</div></div>
+        <div class="weight-card"><div class="weight-label">Recitation</div><div class="weight-val" style="color:var(--accent2)">10%</div></div>
+        <div class="weight-card"><div class="weight-label">Midterm</div><div class="weight-val" style="color:var(--accent)">30%</div></div>
+        <div class="weight-card"><div class="weight-label">Project</div><div class="weight-val" style="color:var(--success)">10%</div></div>
+        <div class="weight-card"><div class="weight-label">Term Paper</div><div class="weight-val" style="color:var(--warn)">10%</div></div>
+        <div class="weight-card"><div class="weight-label">Finals</div><div class="weight-val" style="color:var(--warn)">30%</div></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div class="card-title" style="margin-bottom:0" id="gbTitle">Student Grades</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm btn-secondary" onclick="toggleAddForm()">+ Add Student</button>
+            <button class="btn btn-sm btn-secondary" onclick="triggerCSVImport()">↑ Import CSV</button>
+            <button class="btn btn-sm btn-secondary" onclick="syncFromSheet()">↻ Sync</button>
+            <button class="btn btn-sm btn-primary" onclick="saveToSheet()">↑ Save to Sheet</button>
+          </div>
+        </div>
+        <div id="addForm" class="inline-form hidden">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:12px;letter-spacing:0.05em;text-transform:uppercase">Add Student</div>
+          <div class="add-grid">
+            <div class="field" style="margin:0"><label>Student Name</label><input type="text" id="newName" placeholder="Juan dela Cruz"></div>
+            <div class="field" style="margin:0"><label>Student No.</label><input type="text" id="newId" placeholder="2021-00001"></div>
+            <div class="field" style="margin:0"><label>Email</label><input type="email" id="newEmail" placeholder="student@gmail.com"></div>
+            <div class="field" style="margin:0"><label>Quiz 1 /20</label><input type="number" id="newQ1" placeholder="0" min="0" max="20"></div>
+            <div class="field" style="margin:0"><label>Quiz 2 /30</label><input type="number" id="newQ2" placeholder="0" min="0" max="30"></div>
+            <div class="field" style="margin:0"><label>Quiz 3 /50</label><input type="number" id="newQ3" placeholder="0" min="0" max="50"></div>
+            <div class="field" style="margin:0"><label>Recitation /20</label><input type="number" id="newRec" placeholder="0" min="0" max="20"></div>
+            <div class="field" style="margin:0"><label>Midterm /50</label><input type="number" id="newMid" placeholder="0" min="0" max="100"></div>
+            <div class="field" style="margin:0"><label>Project /100</label><input type="number" id="newProj" placeholder="0" min="0" max="100"></div>
+            <div class="field" style="margin:0"><label>Term Paper /100</label><input type="number" id="newPaper" placeholder="0" min="0" max="100"></div>
+            <div class="field" style="margin:0"><label>Finals /50</label><input type="number" id="newFinals" placeholder="0" min="0" max="50"></div>
+            <button class="btn btn-primary" style="margin-top:20px" onclick="addStudent()">Add</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th rowspan="2">#</th>
+                <th rowspan="2">Student Name</th>
+                <th rowspan="2">Student No.</th>
+                <th colspan="3" class="th-quiz" style="text-align:center">Quizzes</th>
+                <th colspan="1" class="th-rec" style="text-align:center">Recitation</th>
+                <th colspan="1" class="th-mid" style="text-align:center">Midterm</th>
+                <th colspan="1" class="th-proj" style="text-align:center">Project</th>
+                <th colspan="1" class="th-paper" style="text-align:center">Term Paper</th>
+                <th colspan="1" class="th-finals" style="text-align:center">Finals</th>
+                <th rowspan="2">Average</th>
+                <th rowspan="2">Grade</th>
+                <th rowspan="2">Remarks</th>
+                <th rowspan="2"></th>
+              </tr>
+              <tr>
+                <th class="th-quiz">/20</th><th class="th-quiz">/25</th><th class="th-quiz">/30</th>
+                <th class="th-rec">/20</th><th class="th-mid">/50</th>
+                <th class="th-proj">/100</th><th class="th-paper">/100</th>
+                <th class="th-finals">/50</th><th class="th-finals"></th>
+              </tr>
+            </thead>
+            <tbody id="gradeTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI ASSISTANT -->
+  <div id="panel-ai" class="tab-panel">
+    <div class="card">
+      <div class="card-title">AI Grade Assistant</div>
+      <div class="chat-box" id="chatBox">
+        <div class="msg ai">
+          <div class="msg-avatar">✦</div>
+          <div class="msg-bubble">Hi! I'm your Grade Assistant. I can analyze quiz scores, recitation, project, term paper, and overall performance. What would you like to know?</div>
+        </div>
+      </div>
+      <div class="chat-input-row">
+        <div class="field" style="margin:0;flex:1"><input type="text" id="chatInput" placeholder="Ask about student performance…" onkeydown="if(event.key==='Enter')sendChat()"></div>
+        <button class="btn btn-primary" onclick="sendChat()">Send</button>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-secondary" onclick="quickPrompt('Who are the failing students?')">Failing students</button>
+        <button class="btn btn-sm btn-secondary" onclick="quickPrompt('What is the class average per component?')">Class stats</button>
+        <button class="btn btn-sm btn-secondary" onclick="quickPrompt('Who scored highest in quizzes?')">Quiz leaders</button>
+        <button class="btn btn-sm btn-secondary" onclick="quickPrompt('Give me a brief performance summary of the class.')">Summary</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SYNC LOG -->
+  <div id="panel-log" class="tab-panel">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:0">Sync Log</div>
+        <button class="btn btn-sm btn-danger" onclick="clearLog()">Clear Log</button>
+      </div>
+      <div id="logEntries"><div style="color:var(--muted);font-size:13px;text-align:center;padding:40px">No sync activity yet.</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="grade-monitoring.js"></script>
+</body>
+</html>
