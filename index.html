@@ -6,9 +6,67 @@
   <title>Grade Monitoring System</title>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="grade-monitoring.css">
+
+  <style>
+    /* Toast Notification */
+    #toast-notification {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: #1e2d22;
+      border: 1px solid #2d5a38;
+      border-radius: 12px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 290px;
+      z-index: 99999;
+      transform: translateY(90px);
+      opacity: 0;
+      transition: transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
+      pointer-events: none;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+    }
+    #toast-notification.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    .toast-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: #166534;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .toast-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: #d1fae5;
+    }
+    .toast-sub {
+      margin: 3px 0 0;
+      font-size: 12px;
+      color: #6ee7b7;
+      opacity: 0.85;
+    }
+    .toast-progress {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      background: #4ade80;
+      border-radius: 0 0 12px 12px;
+      width: 100%;
+      transform-origin: left;
+    }
+  </style>
 </head>
 <body>
-  
 
 <!-- Auth Guard Overlay -->
 <div id="authGuard">
@@ -40,7 +98,6 @@
 <div class="tabs">
   <button class="tab active" onclick="switchTab('setup')">Sheet Setup</button>
   <button class="tab" onclick="switchTab('gradebook')">Gradebook</button>
-  <button class="tab" onclick="switchTab('ai')">AI Assistant</button>
   <button class="tab" onclick="switchTab('log')">Sync Log</button>
 </div>
 
@@ -51,8 +108,8 @@
   <div id="panel-setup" class="tab-panel active">
     <div class="card">
       <div class="card-title">Google Sheets Connection</div>
-      <div class="field"><label>Google Sheets API Key</label><input type="password" id="apiKey" placeholder="AIza..." autocomplete="off"></div>
-      <div class="field"><label>Spreadsheet ID <span style="color:var(--muted)">(from the Sheet URL)</span></label><input type="text" id="sheetId" placeholder="1xsgj3iOgkBayh8QHis5f4XK..."></div>
+      <div class="field"><label>Google Sheets API Key</label><input type="password" id="apiKey" placeholder="AIza..." autocomplete="off" oninput="saveInputs()"></div>
+      <div class="field"><label>Spreadsheet ID <span style="color:var(--muted)">(from the Sheet URL)</span></label><input type="text" id="sheetId" placeholder="1xsgj3iOgkBayh8QHis5f4XK..." oninput="saveInputs()"></div>
       <div class="field-row">
         <div class="field"><label>Course</label>
           <select id="course"><option>BSIT</option><option>BSCS</option><option>BSIS</option><option>BTVTED</option><option>BSA</option><option>BSBA</option><option>BPA</option><option>BSE</option></select>
@@ -63,8 +120,7 @@
       </div>
       <div class="field"><label>Subject</label><input type="text" id="subject" placeholder="e.g. Algorithms"></div>
       <div class="actions">
-        <button class="btn btn-secondary" onclick="testConnection()">Test Connection</button>
-        <button class="btn btn-primary" id="connectBtn" onclick="connectSheet()">Create &amp; Connect Sheet</button>
+        <button class="btn btn-primary" id="connectBtn" onclick="connectSheet()">Connect Sheet</button>
       </div>
     </div>
     <div id="connectedInfo" class="hidden connected-info">
@@ -108,7 +164,6 @@
           <div class="card-title" style="margin-bottom:0" id="gbTitle">Student Grades</div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm btn-secondary" onclick="toggleAddForm()">+ Add Student</button>
-            <button class="btn btn-sm btn-secondary" onclick="triggerCSVImport()">↑ Import CSV</button>
             <button class="btn btn-sm btn-secondary" onclick="syncFromSheet()">↻ Sync</button>
             <button class="btn btn-sm btn-primary" onclick="saveToSheet()">↑ Save to Sheet</button>
           </div>
@@ -117,13 +172,12 @@
           <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:12px;letter-spacing:0.05em;text-transform:uppercase">Add Student</div>
           <div class="add-grid">
             <div class="field" style="margin:0"><label>Student Name</label><input type="text" id="newName" placeholder="Juan dela Cruz"></div>
-            <div class="field" style="margin:0"><label>Student No.</label><input type="text" id="newId" placeholder="2021-00001"></div>
-            <div class="field" style="margin:0"><label>Email</label><input type="email" id="newEmail" placeholder="student@gmail.com"></div>
+            <div class="field" style="margin:0"><label>Student No.</label><input type="text" id="newStudentNo" placeholder="2024-00001"></div>
             <div class="field" style="margin:0"><label>Quiz 1 /20</label><input type="number" id="newQ1" placeholder="0" min="0" max="20"></div>
-            <div class="field" style="margin:0"><label>Quiz 2 /30</label><input type="number" id="newQ2" placeholder="0" min="0" max="30"></div>
-            <div class="field" style="margin:0"><label>Quiz 3 /50</label><input type="number" id="newQ3" placeholder="0" min="0" max="50"></div>
+            <div class="field" style="margin:0"><label>Quiz 2 /25</label><input type="number" id="newQ2" placeholder="0" min="0" max="25"></div>
+            <div class="field" style="margin:0"><label>Quiz 3 /30</label><input type="number" id="newQ3" placeholder="0" min="0" max="30"></div>
             <div class="field" style="margin:0"><label>Recitation /20</label><input type="number" id="newRec" placeholder="0" min="0" max="20"></div>
-            <div class="field" style="margin:0"><label>Midterm /50</label><input type="number" id="newMid" placeholder="0" min="0" max="100"></div>
+            <div class="field" style="margin:0"><label>Midterm /50</label><input type="number" id="newMid" placeholder="0" min="0" max="50"></div>
             <div class="field" style="margin:0"><label>Project /100</label><input type="number" id="newProj" placeholder="0" min="0" max="100"></div>
             <div class="field" style="margin:0"><label>Term Paper /100</label><input type="number" id="newPaper" placeholder="0" min="0" max="100"></div>
             <div class="field" style="margin:0"><label>Finals /50</label><input type="number" id="newFinals" placeholder="0" min="0" max="50"></div>
@@ -134,53 +188,26 @@
           <table>
             <thead>
               <tr>
-                <th rowspan="2">#</th>
-                <th rowspan="2">Student Name</th>
-                <th rowspan="2">Student No.</th>
-                <th colspan="3" class="th-quiz" style="text-align:center">Quizzes</th>
-                <th colspan="1" class="th-rec" style="text-align:center">Recitation</th>
-                <th colspan="1" class="th-mid" style="text-align:center">Midterm</th>
-                <th colspan="1" class="th-proj" style="text-align:center">Project</th>
-                <th colspan="1" class="th-paper" style="text-align:center">Term Paper</th>
-                <th colspan="1" class="th-finals" style="text-align:center">Finals</th>
-                <th rowspan="2">Average</th>
-                <th rowspan="2">Grade</th>
-                <th rowspan="2">Remarks</th>
-                <th rowspan="2"></th>
-              </tr>
-              <tr>
-                <th class="th-quiz">/20</th><th class="th-quiz">/25</th><th class="th-quiz">/30</th>
-                <th class="th-rec">/20</th><th class="th-mid">/50</th>
-                <th class="th-proj">/100</th><th class="th-paper">/100</th>
-                <th class="th-finals">/50</th><th class="th-finals"></th>
+                <th>#</th>
+                <th>Student Name</th>
+                <th>Student No.</th>
+                <th class="th-quiz">/20</th>
+                <th class="th-quiz">/25</th>
+                <th class="th-quiz">/30</th>
+                <th class="th-rec">/20</th>
+                <th class="th-mid">/50</th>
+                <th class="th-proj">/100</th>
+                <th class="th-paper">/100</th>
+                <th class="th-finals">/50</th>
+                <th>Average</th>
+                <th>Grade</th>
+                <th>Remarks</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="gradeTable"></tbody>
           </table>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- AI ASSISTANT -->
-  <div id="panel-ai" class="tab-panel">
-    <div class="card">
-      <div class="card-title">AI Grade Assistant</div>
-      <div class="chat-box" id="chatBox">
-        <div class="msg ai">
-          <div class="msg-avatar">✦</div>
-          <div class="msg-bubble">Hi! I'm your Grade Assistant. I can analyze quiz scores, recitation, project, term paper, and overall performance. What would you like to know?</div>
-        </div>
-      </div>
-      <div class="chat-input-row">
-        <div class="field" style="margin:0;flex:1"><input type="text" id="chatInput" placeholder="Ask about student performance…" onkeydown="if(event.key==='Enter')sendChat()"></div>
-        <button class="btn btn-primary" onclick="sendChat()">Send</button>
-      </div>
-      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-sm btn-secondary" onclick="quickPrompt('Who are the failing students?')">Failing students</button>
-        <button class="btn btn-sm btn-secondary" onclick="quickPrompt('What is the class average per component?')">Class stats</button>
-        <button class="btn btn-sm btn-secondary" onclick="quickPrompt('Who scored highest in quizzes?')">Quiz leaders</button>
-        <button class="btn btn-sm btn-secondary" onclick="quickPrompt('Give me a brief performance summary of the class.')">Summary</button>
       </div>
     </div>
   </div>
@@ -197,6 +224,61 @@
   </div>
 </div>
 
+<!-- Toast Notification -->
+<div id="toast-notification">
+  <div class="toast-icon">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  </div>
+  <div>
+    <p class="toast-title">Saved to Google Sheets!</p>
+    <p class="toast-sub">Student data synced successfully.</p>
+  </div>
+  <div class="toast-progress" id="toast-progress"></div>
+</div>
+
 <script src="grade-monitoring.js"></script>
+
+<script>
+  // ── Toast Notification ──────────────────────────────────────────────
+  function showSaveToast() {
+    const toast = document.getElementById('toast-notification');
+    const bar   = document.getElementById('toast-progress');
+
+    // Reset progress bar instantly
+    bar.style.transition = 'none';
+    bar.style.width = '100%';
+
+    // Slide in
+    toast.classList.add('show');
+
+    // Start shrinking the progress bar after one frame
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        bar.style.transition = 'width linear 3s';
+        bar.style.width = '0%';
+      });
+    });
+
+    // Slide out after 3.2 s
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => {
+      toast.classList.remove('show');
+    }, 3200);
+  }
+
+  // Patch saveToSheet to show toast after it runs
+  document.addEventListener('DOMContentLoaded', () => {
+    const saveBtn = document.querySelector('button[onclick="saveToSheet()"]');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        // Wait a tick so the original saveToSheet() runs first
+        setTimeout(showSaveToast, 300);
+      });
+    }
+  });
+</script>
+
 </body>
 </html>

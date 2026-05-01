@@ -31,7 +31,6 @@ if (!authData) {
   document.getElementById('logoutBtn').style.display = 'block';
   addLog('success', 'Signed in as ' + user.name, user.email);
 
-  // Apply student mode if not professor
   if (user.email !== PROFESSOR_EMAIL) {
     applyStudentMode(user.email);
   }
@@ -41,20 +40,15 @@ if (!authData) {
 var CLIENT_ID = '287734163767-mnm5q2opeeq8ktnurifrn9evef3nnrmq.apps.googleusercontent.com';
 var SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
 
-// Handle OAuth token from redirect (implicit flow)
 (function handleOAuthRedirect() {
   const hash = window.location.hash;
   if (hash.includes('access_token')) {
     const params = new URLSearchParams(hash.replace('#', ''));
     window._oauthToken = params.get('access_token');
     window.history.replaceState({}, document.title, window.location.pathname);
-    showAlert('✓ Google account connected!', 'success');
+    showAlert('✓ Google account connected! Click "Save to Sheet" to save.', 'success');
     addLog('success', 'OAuth connected', 'Ready to write to Google Sheets');
-    // Auto-resume save if triggered from CSV import or Save to Sheet
-    if (sessionStorage.getItem('gms_pending_save')) {
-      sessionStorage.removeItem('gms_pending_save');
-      saveToSheet();
-    }
+    sessionStorage.removeItem('gms_pending_save');
   }
 })();
 
@@ -145,7 +139,7 @@ function logout() {
 
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', ['setup', 'gradebook', 'ai', 'log'][i] === name);
+    t.classList.toggle('active', ['setup', 'gradebook', 'log'][i] === name);
   });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
@@ -203,27 +197,26 @@ async function connectSheet() {
   } catch (e) {
     showAlert(`Connection failed: ${e.message}<br><small>Make sure the sheet is shared publicly (Anyone with the link → Viewer/Editor)</small>`);
     addLog('error', 'Connection failed', e.message);
-  } finally { btn.disabled = false; btn.innerHTML = 'Create &amp; Connect Sheet'; }
+  } finally { btn.disabled = false; btn.innerHTML = 'Connect Sheet'; }
 }
 
 async function loadSheetData() {
   try {
-    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${state.sheetId}/values/Sheet1!A2:M200?key=${state.apiKey}`);
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${state.sheetId}/values/Sheet1!A2:N200?key=${state.apiKey}`);
     const data = await res.json();
     if (data.error || !data.values) return;
     state.students = data.values.map((row, i) => ({
       id: i,
       name: row[0] || '',
       studentNo: row[1] || '',
-      email: row[2] || '',
-      q1: parseFloat(row[3]) || 0,
-      q2: parseFloat(row[4]) || 0,
-      q3: parseFloat(row[5]) || 0,
-      rec: parseFloat(row[6]) || 0,
-      midterm: parseFloat(row[7]) || 0,
-      project: parseFloat(row[8]) || 0,
-      paper: parseFloat(row[9]) || 0,
-      finals: parseFloat(row[10]) || 0,
+      q1: parseFloat(row[2]) || 0,
+      q2: parseFloat(row[3]) || 0,
+      q3: parseFloat(row[4]) || 0,
+      rec: parseFloat(row[5]) || 0,
+      midterm: parseFloat(row[6]) || 0,
+      project: parseFloat(row[7]) || 0,
+      paper: parseFloat(row[8]) || 0,
+      finals: parseFloat(row[9]) || 0,
     }));
     addLog('success', 'Data loaded', `${state.students.length} students`);
   } catch (e) { addLog('warn', 'Could not load data', e.message); }
@@ -237,81 +230,143 @@ async function syncFromSheet() {
   addLog('success', 'Sync complete', `${state.students.length} students`);
 }
 
-/* ── SAVE TO SHEET (with OAuth 2.0) ── */
+/* ── SAVE TO SHEET ── */
 async function saveToSheet() {
-  if (!state.connected) return;
+  if (!state.connected) return showAlert('Connect a Google Sheet first.', 'error');
+  if (!state.students.length) return showAlert('No students to save.', 'error');
 
-  // If no OAuth token yet, redirect to Google login automatically
+  // Build header + rows
+  const header = ['Full Name','Student No.','Q1 /20','Q2 /25','Q3 /30','Recitation /20','Midterm /50','Project /100','Term Paper /100','Finals /50','Average','Grade','Remarks'];
+  const rows = state.students.map(s => {
+    const avg = calcAvg(s);
+    const { grade, remarks } = calcGrade(avg);
+    return [s.name, s.studentNo, s.q1, s.q2, s.q3, s.rec, s.midterm, s.project, s.paper, s.finals, avg > 0 ? avg.toFixed(1) : '', grade, remarks];
+  });
+  const values = [header, ...rows];
+
+  // Need OAuth token to write
   if (!window._oauthToken) {
-    sessionStorage.setItem('gms_pending_save', 'true');
-    initOAuth();
-    return;
+    sessionStorage.setItem('gms_pending_save', '1');
+    addLog('info', 'Redirecting to Google auth…', 'OAuth required for write access');
+    return initOAuth();
   }
 
-  showAlert('<span class="spinner"></span> Saving…', 'info');
-  const header = [['Student Name', 'Student No.', 'Email', 'Quiz1 /20', 'Quiz2 /30', 'Quiz3 /50', 'Recitation /20', 'Midterm /100', 'Project /100', 'Term Paper /100', 'Finals /50', 'Average', 'Grade', 'Remarks']];
-  const rows = state.students.map(s => {
-    const avg = calcAvg(s); const { grade, remarks } = calcGrade(avg);
-    return [s.name, s.studentNo, s.email || '', s.q1, s.q2, s.q3, s.rec, s.midterm, s.project, s.paper, s.finals, avg.toFixed(2), grade, remarks];
-  });
+  const btn = document.querySelector('button[onclick="saveToSheet()"]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…'; }
 
   try {
-    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${state.sheetId}/values/Sheet1!A1?valueInputOption=RAW`, {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${state.sheetId}/values/Sheet1!A1?valueInputOption=RAW`;
+    const res = await fetch(url, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${window._oauthToken}`
-      },
-      body: JSON.stringify({ range: 'Sheet1!A1', majorDimension: 'ROWS', values: [...header, ...rows] })
+      headers: { 'Authorization': `Bearer ${window._oauthToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ range: 'Sheet1!A1', majorDimension: 'ROWS', values })
     });
     const data = await res.json();
-    if (data.error) {
-      if (data.error.code === 401) {
-        window._oauthToken = null;
-        sessionStorage.setItem('gms_pending_save', 'true');
-        showAlert('⚠️ Session expired. Redirecting to re-authenticate…', 'error');
-        setTimeout(() => initOAuth(), 1500);
-        return;
-      }
-      throw new Error(data.error.message);
-    }
-    showAlert('✓ Saved to Google Sheets!', 'success');
-    addLog('success', 'Saved to sheet', `${state.students.length} records`);
+    if (data.error) throw new Error(data.error.message);
+
+    addLog('success', 'Saved to Google Sheets', `${state.students.length} students`);
+    showAlert(`✓ Saved ${state.students.length} students to Google Sheets`, 'success');
+
+    // ✅ Fire the clickable toast
+    const count = state.students.length;
+    showGradeSavedToast(
+      count === 1 ? state.students[0].name : `${count} students`,
+      state.subject || ''
+    );
   } catch (e) {
-    showAlert(`Save failed: ${e.message}. <strong><a href="#" onclick="exportCSVManual()">Download CSV instead</a></strong>`, 'error');
     addLog('error', 'Save failed', e.message);
+    showAlert(`✗ Save failed: ${e.message}`, 'error');
+    // Token may be expired — clear it
+    if (e.message.includes('401') || e.message.includes('Invalid')) window._oauthToken = null;
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '↑ Save to Sheet'; }
   }
 }
 
-function exportCSVManual() {
-  const header = [['Student Name', 'Student No.', 'Email', 'Quiz1 /20', 'Quiz2 /30', 'Quiz3 /50', 'Recitation /20', 'Midterm /100', 'Project /100', 'Term Paper /100', 'Finals /50', 'Average', 'Grade', 'Remarks']];
-  const rows = state.students.map(s => {
-    const avg = calcAvg(s); const { grade, remarks } = calcGrade(avg);
-    return [s.name, s.studentNo, s.email || '', s.q1, s.q2, s.q3, s.rec, s.midterm, s.project, s.paper, s.finals, avg.toFixed(2), grade, remarks];
+/* ── TOAST NOTIFICATION ── */
+function showGradeSavedToast(studentName, subject, score) {
+  // Remove any existing toast first
+  const existing = document.getElementById('gms-grade-toast');
+  if (existing) existing.remove();
+  clearTimeout(window._gradeToastTimer);
+
+  const sheetUrl = state.sheetId
+    ? `https://docs.google.com/spreadsheets/d/${state.sheetId}/edit`
+    : null;
+
+  const scoreHtml = (score !== undefined && score !== null)
+    ? `<span style="margin-left:6px;background:rgba(74,222,128,0.18);border:1px solid rgba(74,222,128,0.3);border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700;color:#4ade80;">${score}</span>`
+    : '';
+
+  const toast = document.createElement('div');
+  toast.id = 'gms-grade-toast';
+  toast.innerHTML = `
+    <style>
+      @keyframes gms-slide-in  { from{transform:translateX(110%);opacity:0} to{transform:translateX(0);opacity:1} }
+      @keyframes gms-slide-out { from{transform:translateX(0);opacity:1} to{transform:translateX(110%);opacity:0} }
+      @keyframes gms-progress  { from{transform:scaleX(1)} to{transform:scaleX(0)} }
+    </style>
+    <div id="gms-toast-progress-bar" style="position:absolute;top:0;left:0;right:0;height:3px;background:rgba(255,255,255,0.1);border-radius:12px 12px 0 0;overflow:hidden;">
+      <div style="height:100%;background:linear-gradient(90deg,#4ade80,#22d3ee);animation:gms-progress 4s linear forwards;transform-origin:left;"></div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:12px;">
+      <div style="width:36px;height:36px;border-radius:10px;background:rgba(74,222,128,0.18);border:1px solid rgba(74,222,128,0.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:17px;">✓</div>
+      <div style="flex:1;min-width:0;">
+        <p style="margin:0;font-size:12px;font-weight:700;color:#4ade80;letter-spacing:0.06em;text-transform:uppercase;">Grade Saved</p>
+        <p style="margin:3px 0 0;font-size:13px;color:rgba(255,255,255,0.9);line-height:1.4;">
+          <strong style="color:#fff;">${studentName || 'Student'}</strong>
+          ${subject ? ' — ' + subject : ''}${scoreHtml}
+        </p>
+        <p style="margin:5px 0 0;font-size:11px;color:rgba(74,222,128,0.7);font-weight:500;">🔗 Click to open Google Sheet ↗</p>
+      </div>
+      <button id="gms-toast-close" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:18px;line-height:1;padding:2px;flex-shrink:0;" title="Dismiss">×</button>
+    </div>
+  `;
+
+  Object.assign(toast.style, {
+    position: 'fixed', bottom: '24px', right: '24px', zIndex: '99999',
+    background: 'linear-gradient(135deg, #0f4c35 0%, #1a6b4a 100%)',
+    border: '1px solid rgba(74,222,128,0.2)',
+    color: '#fff', borderRadius: '14px',
+    padding: '18px 18px 16px',
+    minWidth: '300px', maxWidth: '360px',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06)',
+    fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
+    animation: 'gms-slide-in 0.4s cubic-bezier(0,0,0.2,1) forwards',
+    pointerEvents: 'all',
+    cursor: sheetUrl ? 'pointer' : 'default',
+    userSelect: 'none'
   });
-  exportCSV([...header, ...rows]);
+
+  document.body.appendChild(toast);
+
+  function dismissToast() {
+    toast.style.animation = 'gms-slide-out 0.35s cubic-bezier(0.4,0,1,1) forwards';
+    setTimeout(() => toast.remove(), 380);
+    clearTimeout(window._gradeToastTimer);
+  }
+
+  // Clicking anywhere on the toast opens the sheet
+  toast.addEventListener('click', (e) => {
+    // ✕ close button still just dismisses
+    if (e.target.id === 'gms-toast-close') { dismissToast(); return; }
+    if (sheetUrl) {
+      window.open(sheetUrl, '_blank', 'noopener,noreferrer');
+      dismissToast();
+    }
+  });
+
+  // Hover highlight so user knows it's clickable
+  if (sheetUrl) {
+    toast.addEventListener('mouseenter', () => toast.style.background = 'linear-gradient(135deg, #145c3f 0%, #1f7a56 100%)');
+    toast.addEventListener('mouseleave', () => toast.style.background = 'linear-gradient(135deg, #0f4c35 0%, #1a6b4a 100%)');
+  }
+
+  // Auto-dismiss after 4s
+  window._gradeToastTimer = setTimeout(dismissToast, 4200);
 }
 
-function exportCSV(values) {
-  const csv = values.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = `grades_${state.subject || 'export'}.csv`.replace(/\s+/g, '_');
-  a.click();
-}
-
-function disconnect() {
-  localStorage.removeItem('gms_connection');
-  window._oauthToken = null;
-  Object.assign(state, { connected: false, apiKey: '', sheetId: '', students: [] });
-  document.getElementById('connectedInfo').classList.add('hidden');
-  document.getElementById('syncBadge').style.display = 'none';
-  document.getElementById('notConnectedMsg').classList.remove('hidden');
-  document.getElementById('gradebookContent').classList.add('hidden');
-  document.getElementById('setupHelp').classList.remove('hidden');
-  addLog('info', 'Disconnected', ''); hideAlert();
-}
-
+  
 /* ── CSV IMPORT ── */
 function triggerCSVImport() {
   const input = document.createElement('input');
@@ -334,17 +389,16 @@ function importCSV(text, filename) {
   const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase());
   const col = name => headers.findIndex(h => h.includes(name));
 
-  const idCol     = col('id') !== -1 ? col('id') : col('student_no') !== -1 ? col('student_no') : col('studentno');
-  const nameCol   = col('full_name') !== -1 ? col('full_name') : col('name');
-  const emailCol  = col('email');
-  const q1Col     = col('q1') !== -1 ? col('q1') : col('quiz1') !== -1 ? col('quiz1') : col('quiz 1');
-  const q2Col     = col('q2') !== -1 ? col('q2') : col('quiz2') !== -1 ? col('quiz2') : col('quiz 2');
-  const q3Col     = col('q3') !== -1 ? col('q3') : col('quiz3') !== -1 ? col('quiz3') : col('quiz 3');
-  const recCol    = col('rec') !== -1 ? col('rec') : col('recitation');
-  const midCol    = col('mid') !== -1 ? col('mid') : col('midterm');
-  const projCol   = col('proj') !== -1 ? col('proj') : col('project');
-  const paperCol  = col('paper') !== -1 ? col('paper') : col('term');
-  const finalsCol = col('final');
+  const nameCol    = col('full_name') !== -1 ? col('full_name') : col('name');
+  const studentNoCol = col('student no') !== -1 ? col('student no') : col('studentno') !== -1 ? col('studentno') : col('student_no');
+  const q1Col      = col('q1') !== -1 ? col('q1') : col('quiz1') !== -1 ? col('quiz1') : col('quiz 1');
+  const q2Col      = col('q2') !== -1 ? col('q2') : col('quiz2') !== -1 ? col('quiz2') : col('quiz 2');
+  const q3Col      = col('q3') !== -1 ? col('q3') : col('quiz3') !== -1 ? col('quiz3') : col('quiz 3');
+  const recCol     = col('rec') !== -1 ? col('rec') : col('recitation');
+  const midCol     = col('mid') !== -1 ? col('mid') : col('midterm');
+  const projCol    = col('proj') !== -1 ? col('proj') : col('project');
+  const paperCol   = col('paper') !== -1 ? col('paper') : col('term');
+  const finalsCol  = col('final');
 
   let imported = 0, skipped = 0;
   const newStudents = [];
@@ -354,14 +408,12 @@ function importCSV(text, filename) {
     const get = idx => idx >= 0 && row[idx] ? row[idx].replace(/"/g, '').trim() : '';
 
     const name = get(nameCol);
-    const studentNo = get(idCol);
-    if (!name && !studentNo) { skipped++; continue; }
+    if (!name) { skipped++; continue; }
 
     newStudents.push({
       id: Date.now() + i,
       name: name || '—',
-      studentNo: studentNo || '—',
-      email: get(emailCol) || '',
+      studentNo: get(studentNoCol) || '',
       q1:      parseFloat(get(q1Col))     || 0,
       q2:      parseFloat(get(q2Col))     || 0,
       q3:      parseFloat(get(q3Col))     || 0,
@@ -387,9 +439,8 @@ function importCSV(text, filename) {
   }
 
   renderTable();
-  showAlert(`✓ Imported ${imported} students from <strong>${filename}</strong>${skipped ? ` (${skipped} skipped)` : ''}. Saving to Sheet…`, 'success');
+  showAlert(`✓ Imported ${imported} students from <strong>${filename}</strong>${skipped ? ` (${skipped} skipped)` : ''}.`, 'success');
   addLog('success', `CSV imported: ${imported} students`, filename);
-  saveToSheet(); // ← auto-save to Google Sheets after import
 }
 
 function calcAvg(s) {
@@ -424,7 +475,7 @@ function gradeClass(g) {
 function renderTable() {
   const tbody = document.getElementById('gradeTable');
   if (!state.students.length) {
-    tbody.innerHTML = `<tr><td colspan="15" style="text-align:center;color:var(--muted);padding:32px">No students yet. Click "+ Add Student" or "↑ Import CSV" to begin.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="15" style="text-align:center;color:var(--muted);padding:32px">No students yet. Click "+ Add Student" to begin.</td></tr>`;
     updateStats(); return;
   }
   tbody.innerHTML = state.students.map((s, i) => {
@@ -433,7 +484,7 @@ function renderTable() {
     return `<tr data-email="${s.email || ''}">
       <td style="color:var(--muted)">${i + 1}</td>
       <td style="font-weight:500">${s.name || '—'}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">${s.studentNo || '—'}</td>
+      <td style="color:var(--muted);font-size:12px">${s.studentNo || '—'}</td>
       <td><input class="gi" type="number" value="${s.q1 || ''}" min="0" max="20" onchange="upd(${i},'q1',this.value)" placeholder="—"></td>
       <td><input class="gi" type="number" value="${s.q2 || ''}" min="0" max="30" onchange="upd(${i},'q2',this.value)" placeholder="—"></td>
       <td><input class="gi" type="number" value="${s.q3 || ''}" min="0" max="50" onchange="upd(${i},'q3',this.value)" placeholder="—"></td>
@@ -458,6 +509,12 @@ function renderTable() {
 function upd(i, field, val) {
   state.students[i][field] = parseFloat(val) || 0;
   renderTable();
+  // Show notification: grade was updated (debounced so rapid typing doesn't spam)
+  clearTimeout(window._updToastTimer);
+  window._updToastTimer = setTimeout(() => {
+    const s = state.students[i];
+    if (s) showGradeSavedToast(s.name, state.subject || '');
+  }, 800);
 }
 
 function updateStats() {
@@ -480,11 +537,10 @@ function toggleAddForm() { document.getElementById('addForm').classList.toggle('
 
 function addStudent() {
   const name = document.getElementById('newName').value.trim();
-  const studentNo = document.getElementById('newId').value.trim();
-  const email = document.getElementById('newEmail').value.trim() || '';
+  const studentNo = document.getElementById('newStudentNo').value.trim() || '';
   if (!name) return;
   state.students.push({
-    id: Date.now(), name, studentNo, email,
+    id: Date.now(), name, studentNo,
     q1:      parseFloat(document.getElementById('newQ1').value)    || 0,
     q2:      parseFloat(document.getElementById('newQ2').value)    || 0,
     q3:      parseFloat(document.getElementById('newQ3').value)    || 0,
@@ -494,7 +550,7 @@ function addStudent() {
     paper:   parseFloat(document.getElementById('newPaper').value) || 0,
     finals:  parseFloat(document.getElementById('newFinals').value)|| 0,
   });
-  ['newName', 'newId', 'newEmail', 'newQ1', 'newQ2', 'newQ3', 'newRec', 'newMid', 'newProj', 'newPaper', 'newFinals']
+  ['newName', 'newStudentNo', 'newQ1', 'newQ2', 'newQ3', 'newRec', 'newMid', 'newProj', 'newPaper', 'newFinals']
     .forEach(id => document.getElementById(id).value = '');
   renderTable();
   addLog('info', 'Student added', name);
@@ -505,54 +561,6 @@ function removeStudent(i) {
   if (!confirm('Remove ' + name + '?')) return;
   state.students.splice(i, 1); renderTable();
   addLog('warn', 'Student removed', name);
-}
-
-function quickPrompt(t) { document.getElementById('chatInput').value = t; sendChat(); }
-
-async function sendChat() {
-  const input = document.getElementById('chatInput');
-  const msg = input.value.trim(); if (!msg) return; input.value = '';
-  appendMsg('user', msg); const typingEl = appendTyping();
-  const ctx = buildContext();
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514', max_tokens: 1000,
-        system: `You are a Grade Assistant. Class data:\n\n${ctx}\n\nGrading: Quizzes 20%, Recitation 10%, Midterm 25%, Project 20%, Term Paper 25%. Passing=75+. Be concise.`,
-        messages: [{ role: 'user', content: msg }]
-      })
-    });
-    const data = await res.json(); typingEl.remove();
-    appendMsg('ai', data.content?.[0]?.text || 'No response.');
-  } catch (e) { typingEl.remove(); appendMsg('ai', 'Error: ' + e.message); }
-}
-
-function buildContext() {
-  if (!state.connected || !state.students.length) return 'No data loaded yet.';
-  return [
-    `Course: ${state.course} ${state.section}`,
-    `Subject: ${state.subject}`,
-    `Students: ${state.students.length}`, '',
-    ...state.students.map(s => {
-      const avg = calcAvg(s); const { grade, remarks } = calcGrade(avg);
-      return `- ${s.name} (${s.studentNo}): Q1=${s.q1}/20 Q2=${s.q2}/30 Q3=${s.q3}/50 Rec=${s.rec}/20 Mid=${s.midterm}/100 Proj=${s.project}/100 Paper=${s.paper}/100 Finals=${s.finals}/50 → Avg=${avg.toFixed(1)} ${grade} ${remarks}`;
-    })
-  ].join('\n');
-}
-
-function appendMsg(role, text) {
-  const box = document.getElementById('chatBox');
-  const div = document.createElement('div'); div.className = `msg ${role}`;
-  div.innerHTML = `<div class="msg-avatar">${role === 'ai' ? '✦' : '👤'}</div><div class="msg-bubble">${text.replace(/\n/g, '<br>')}</div>`;
-  box.appendChild(div); box.scrollTop = box.scrollHeight; return div;
-}
-
-function appendTyping() {
-  const box = document.getElementById('chatBox');
-  const div = document.createElement('div'); div.className = 'msg ai';
-  div.innerHTML = `<div class="msg-avatar">✦</div><div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
-  box.appendChild(div); box.scrollTop = box.scrollHeight; return div;
 }
 
 function addLog(type, msg, meta = '') {
@@ -574,3 +582,18 @@ renderLog();
 
 const addBtn = document.querySelector('.add-btn');
 if (addBtn) addBtn.addEventListener('click', addStudent);
+
+/* ── SAVE INPUTS TO LOCALSTORAGE ── */
+function saveInputs() {
+  localStorage.setItem('gms_apiKey', document.getElementById('apiKey').value);
+  localStorage.setItem('gms_sheetId', document.getElementById('sheetId').value);
+}
+
+function restoreInputs() {
+  const key = localStorage.getItem('gms_apiKey');
+  const id = localStorage.getItem('gms_sheetId');
+  if (key) document.getElementById('apiKey').value = key;
+  if (id) document.getElementById('sheetId').value = id;
+}
+
+restoreInputs();
