@@ -605,6 +605,14 @@ function saveInputs() {
   localStorage.setItem('gms_sheetId', document.getElementById('sheetId').value);
 }
 
+restoreInputs();
+
+// Auto-connect for professor
+const _auth = JSON.parse(sessionStorage.getItem('gms_auth') || '{}');
+if (_auth.email === 'jprof801@gmail.com' && !state.connected) {
+  setTimeout(() => connectSheet(), 500);
+}
+
 function restoreInputs() {
   const key = localStorage.getItem('gms_apiKey');
   const id = localStorage.getItem('gms_sheetId');
