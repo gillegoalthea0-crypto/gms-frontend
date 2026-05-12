@@ -266,9 +266,12 @@ async function saveToSheet() {
     showAlert(`✓ Saved ${state.students.length} students to Google Sheets`, 'success');
 
     const count = state.students.length;
+    // ── FIXED: pass sheetId so toast always opens the correct sheet ──
     showGradeSavedToast(
       count === 1 ? state.students[0].name : `${count} students`,
-      state.subject || ''
+      state.subject || '',
+      undefined,
+      state.sheetId
     );
   } catch (e) {
     addLog('error', 'Save failed', e.message);
@@ -280,13 +283,15 @@ async function saveToSheet() {
 }
 
 /* ── TOAST NOTIFICATION ── */
-function showGradeSavedToast(studentName, subject, score) {
+// ── FIXED: accepts sheetId param so it works for any Google account ──
+function showGradeSavedToast(studentName, subject, score, sheetId) {
   const existing = document.getElementById('gms-grade-toast');
   if (existing) existing.remove();
   clearTimeout(window._gradeToastTimer);
 
-  const sheetUrl = state.sheetId
-    ? `https://docs.google.com/spreadsheets/d/${state.sheetId}/edit`
+  const resolvedSheetId = sheetId || state.sheetId;
+  const sheetUrl = resolvedSheetId
+    ? `https://docs.google.com/spreadsheets/d/${resolvedSheetId}/edit`
     : null;
 
   const scoreHtml = (score !== undefined && score !== null)
@@ -312,7 +317,10 @@ function showGradeSavedToast(studentName, subject, score) {
           <strong style="color:#fff;">${studentName || 'Student'}</strong>
           ${subject ? ' — ' + subject : ''}${scoreHtml}
         </p>
-        <p style="margin:5px 0 0;font-size:11px;color:rgba(74,222,128,0.7);font-weight:500;">🔗 Click to open Google Sheet ↗</p>
+        ${sheetUrl
+      ? `<p style="margin:5px 0 0;font-size:11px;color:rgba(74,222,128,0.7);font-weight:500;">🔗 Click to open Google Sheet ↗</p>`
+      : `<p style="margin:5px 0 0;font-size:11px;color:rgba(255,255,255,0.3);">Connect a sheet to enable quick access</p>`
+    }
       </div>
       <button id="gms-toast-close" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:18px;line-height:1;padding:2px;flex-shrink:0;" title="Dismiss">×</button>
     </div>
@@ -344,6 +352,7 @@ function showGradeSavedToast(studentName, subject, score) {
   toast.addEventListener('click', (e) => {
     if (e.target.id === 'gms-toast-close') { dismissToast(); return; }
     if (sheetUrl) {
+      // Opens in new tab — works for any Google account
       window.open(sheetUrl, '_blank', 'noopener,noreferrer');
       dismissToast();
     }
@@ -433,14 +442,20 @@ function importCSV(text, filename) {
   addLog('success', `CSV imported: ${imported} students`, filename);
 }
 
+/* ── FIXED: returns 0 (INC) when no grades are entered yet ── */
 function calcAvg(s) {
+  const hasAnyGrade = s.q1 || s.q2 || s.q3 || s.rec || s.midterm || s.project || s.paper || s.finals;
+  if (!hasAnyGrade) return 0;
+
   const qAvg = ((s.q1 / 20 + s.q2 / 30 + s.q3 / 50) / 3) * 100;
   const rec = (s.rec / 20) * 100;
   const finals = (s.finals / 50) * 100;
   return qAvg * 0.20 + rec * 0.10 + s.midterm * 0.25 + s.project * 0.20 + s.paper * 0.25;
 }
 
+/* ── FIXED: avg <= 0 always returns INC, never 5.00 ── */
 function calcGrade(avg) {
+  if (avg <= 0) return { grade: 'INC', remarks: 'Incomplete' };
   if (avg >= 97) return { grade: '1.00', remarks: 'Passed' };
   if (avg >= 94) return { grade: '1.25', remarks: 'Passed' };
   if (avg >= 91) return { grade: '1.50', remarks: 'Passed' };
@@ -450,8 +465,7 @@ function calcGrade(avg) {
   if (avg >= 79) return { grade: '2.50', remarks: 'Passed' };
   if (avg >= 76) return { grade: '2.75', remarks: 'Passed' };
   if (avg >= 75) return { grade: '3.00', remarks: 'Passed' };
-  if (avg > 0) return { grade: '5.00', remarks: 'Failed' };
-  return { grade: 'INC', remarks: 'Incomplete' };
+  return { grade: '5.00', remarks: 'Failed' };
 }
 
 function gradeClass(g) {
@@ -496,13 +510,14 @@ function renderTable() {
   }
 }
 
+/* ── FIXED: passes sheetId to toast so it always opens the correct sheet ── */
 function upd(i, field, val) {
   state.students[i][field] = parseFloat(val) || 0;
   renderTable();
   clearTimeout(window._updToastTimer);
   window._updToastTimer = setTimeout(() => {
     const s = state.students[i];
-    if (s) showGradeSavedToast(s.name, state.subject || '');
+    if (s) showGradeSavedToast(s.name, state.subject || '', undefined, state.sheetId);
   }, 800);
 }
 
@@ -600,7 +615,6 @@ function restoreInputs() {
 restoreInputs();
 
 /* ── COURSE → BLOCK FILTER ── */
-// Define how many blocks each course has
 const COURSE_BLOCKS = {
   'BSCS': ['Block 1', 'Block 2'],
   'BSIT': ['Block 1', 'Block 2', 'Block 3', 'Block 4', 'Block 5'],
@@ -611,6 +625,7 @@ const COURSE_BLOCKS = {
   'BSA': ['Block 1'],
   'BSE': ['Block 1'],
 };
+
 function updateBlockOptions() {
   const courseEl = document.getElementById('course');
   const sectionEl = document.getElementById('section');
@@ -622,15 +637,12 @@ function updateBlockOptions() {
   sectionEl.innerHTML = blocks.map(b => `<option value="${b}">${b}</option>`).join('');
 }
 
-// Run whenever course changes
 document.addEventListener('DOMContentLoaded', () => {
   const courseEl = document.getElementById('course');
   if (courseEl) {
     courseEl.addEventListener('change', updateBlockOptions);
-    // Set correct blocks immediately on load
     updateBlockOptions();
   }
 });
 
-// Fallback: also run right away in case DOM is already ready
 updateBlockOptions();
