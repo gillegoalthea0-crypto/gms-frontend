@@ -514,13 +514,7 @@ function renderTable() {
 function upd(i, field, val) {
   state.students[i][field] = parseFloat(val) || 0;
   renderTable();
-  clearTimeout(window._updToastTimer);
-  window._updToastTimer = setTimeout(() => {
-    const s = state.students[i];
-    if (s) showGradeSavedToast(s.name, state.subject || '', undefined, state.sheetId);
-  }, 800);
 }
-
 function updateStats() {
   const n = state.students.length;
   document.getElementById('statTotal').textContent = n;
