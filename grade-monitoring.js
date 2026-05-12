@@ -1,5 +1,5 @@
 /* ── APP STATE ── */
-var state = { connected:false, apiKey:'', sheetId:'', course:'', section:'', subject:'', sheetTitle:'', students:[], logs:[] };
+var state = { connected: false, apiKey: '', sheetId: '', course: '', section: '', subject: '', sheetTitle: '', students: [], logs: [] };
 
 /* ── AUTH CHECK ── */
 const authGuard = document.getElementById('authGuard');
@@ -10,7 +10,7 @@ if (urlToken && urlUser) {
   const user = JSON.parse(decodeURIComponent(urlUser));
   sessionStorage.setItem('gms_auth', JSON.stringify({
     name: user.name, email: user.email, role: user.role,
-    initials: user.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase(),
+    initials: user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
     token: urlToken, loggedIn: true
   }));
   window.history.replaceState({}, document.title, window.location.pathname);
@@ -235,8 +235,7 @@ async function saveToSheet() {
   if (!state.connected) return showAlert('Connect a Google Sheet first.', 'error');
   if (!state.students.length) return showAlert('No students to save.', 'error');
 
-  // Build header + rows
-  const header = ['Full Name','Student No.','Q1 /20','Q2 /25','Q3 /30','Recitation /20','Midterm /50','Project /100','Term Paper /100','Finals /50','Average','Grade','Remarks'];
+  const header = ['Full Name', 'Student No.', 'Q1 /20', 'Q2 /25', 'Q3 /30', 'Recitation /20', 'Midterm /50', 'Project /100', 'Term Paper /100', 'Finals /50', 'Average', 'Grade', 'Remarks'];
   const rows = state.students.map(s => {
     const avg = calcAvg(s);
     const { grade, remarks } = calcGrade(avg);
@@ -244,7 +243,6 @@ async function saveToSheet() {
   });
   const values = [header, ...rows];
 
-  // Need OAuth token to write
   if (!window._oauthToken) {
     sessionStorage.setItem('gms_pending_save', '1');
     addLog('info', 'Redirecting to Google auth…', 'OAuth required for write access');
@@ -267,7 +265,6 @@ async function saveToSheet() {
     addLog('success', 'Saved to Google Sheets', `${state.students.length} students`);
     showAlert(`✓ Saved ${state.students.length} students to Google Sheets`, 'success');
 
-    // ✅ Fire the clickable toast
     const count = state.students.length;
     showGradeSavedToast(
       count === 1 ? state.students[0].name : `${count} students`,
@@ -276,7 +273,6 @@ async function saveToSheet() {
   } catch (e) {
     addLog('error', 'Save failed', e.message);
     showAlert(`✗ Save failed: ${e.message}`, 'error');
-    // Token may be expired — clear it
     if (e.message.includes('401') || e.message.includes('Invalid')) window._oauthToken = null;
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '↑ Save to Sheet'; }
@@ -285,7 +281,6 @@ async function saveToSheet() {
 
 /* ── TOAST NOTIFICATION ── */
 function showGradeSavedToast(studentName, subject, score) {
-  // Remove any existing toast first
   const existing = document.getElementById('gms-grade-toast');
   if (existing) existing.remove();
   clearTimeout(window._gradeToastTimer);
@@ -346,9 +341,7 @@ function showGradeSavedToast(studentName, subject, score) {
     clearTimeout(window._gradeToastTimer);
   }
 
-  // Clicking anywhere on the toast opens the sheet
   toast.addEventListener('click', (e) => {
-    // ✕ close button still just dismisses
     if (e.target.id === 'gms-toast-close') { dismissToast(); return; }
     if (sheetUrl) {
       window.open(sheetUrl, '_blank', 'noopener,noreferrer');
@@ -356,17 +349,14 @@ function showGradeSavedToast(studentName, subject, score) {
     }
   });
 
-  // Hover highlight so user knows it's clickable
   if (sheetUrl) {
     toast.addEventListener('mouseenter', () => toast.style.background = 'linear-gradient(135deg, #145c3f 0%, #1f7a56 100%)');
     toast.addEventListener('mouseleave', () => toast.style.background = 'linear-gradient(135deg, #0f4c35 0%, #1a6b4a 100%)');
   }
 
-  // Auto-dismiss after 4s
   window._gradeToastTimer = setTimeout(dismissToast, 4200);
 }
 
-  
 /* ── CSV IMPORT ── */
 function triggerCSVImport() {
   const input = document.createElement('input');
@@ -389,16 +379,16 @@ function importCSV(text, filename) {
   const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase());
   const col = name => headers.findIndex(h => h.includes(name));
 
-  const nameCol    = col('full_name') !== -1 ? col('full_name') : col('name');
+  const nameCol = col('full_name') !== -1 ? col('full_name') : col('name');
   const studentNoCol = col('student no') !== -1 ? col('student no') : col('studentno') !== -1 ? col('studentno') : col('student_no');
-  const q1Col      = col('q1') !== -1 ? col('q1') : col('quiz1') !== -1 ? col('quiz1') : col('quiz 1');
-  const q2Col      = col('q2') !== -1 ? col('q2') : col('quiz2') !== -1 ? col('quiz2') : col('quiz 2');
-  const q3Col      = col('q3') !== -1 ? col('q3') : col('quiz3') !== -1 ? col('quiz3') : col('quiz 3');
-  const recCol     = col('rec') !== -1 ? col('rec') : col('recitation');
-  const midCol     = col('mid') !== -1 ? col('mid') : col('midterm');
-  const projCol    = col('proj') !== -1 ? col('proj') : col('project');
-  const paperCol   = col('paper') !== -1 ? col('paper') : col('term');
-  const finalsCol  = col('final');
+  const q1Col = col('q1') !== -1 ? col('q1') : col('quiz1') !== -1 ? col('quiz1') : col('quiz 1');
+  const q2Col = col('q2') !== -1 ? col('q2') : col('quiz2') !== -1 ? col('quiz2') : col('quiz 2');
+  const q3Col = col('q3') !== -1 ? col('q3') : col('quiz3') !== -1 ? col('quiz3') : col('quiz 3');
+  const recCol = col('rec') !== -1 ? col('rec') : col('recitation');
+  const midCol = col('mid') !== -1 ? col('mid') : col('midterm');
+  const projCol = col('proj') !== -1 ? col('proj') : col('project');
+  const paperCol = col('paper') !== -1 ? col('paper') : col('term');
+  const finalsCol = col('final');
 
   let imported = 0, skipped = 0;
   const newStudents = [];
@@ -414,14 +404,14 @@ function importCSV(text, filename) {
       id: Date.now() + i,
       name: name || '—',
       studentNo: get(studentNoCol) || '',
-      q1:      parseFloat(get(q1Col))     || 0,
-      q2:      parseFloat(get(q2Col))     || 0,
-      q3:      parseFloat(get(q3Col))     || 0,
-      rec:     parseFloat(get(recCol))    || 0,
-      midterm: parseFloat(get(midCol))    || 0,
-      project: parseFloat(get(projCol))   || 0,
-      paper:   parseFloat(get(paperCol))  || 0,
-      finals:  parseFloat(get(finalsCol)) || 0,
+      q1: parseFloat(get(q1Col)) || 0,
+      q2: parseFloat(get(q2Col)) || 0,
+      q3: parseFloat(get(q3Col)) || 0,
+      rec: parseFloat(get(recCol)) || 0,
+      midterm: parseFloat(get(midCol)) || 0,
+      project: parseFloat(get(projCol)) || 0,
+      paper: parseFloat(get(paperCol)) || 0,
+      finals: parseFloat(get(finalsCol)) || 0,
     });
     imported++;
   }
@@ -460,7 +450,7 @@ function calcGrade(avg) {
   if (avg >= 79) return { grade: '2.50', remarks: 'Passed' };
   if (avg >= 76) return { grade: '2.75', remarks: 'Passed' };
   if (avg >= 75) return { grade: '3.00', remarks: 'Passed' };
-  if (avg > 0)   return { grade: '5.00', remarks: 'Failed' };
+  if (avg > 0) return { grade: '5.00', remarks: 'Failed' };
   return { grade: 'INC', remarks: 'Incomplete' };
 }
 
@@ -509,7 +499,6 @@ function renderTable() {
 function upd(i, field, val) {
   state.students[i][field] = parseFloat(val) || 0;
   renderTable();
-  // Show notification: grade was updated (debounced so rapid typing doesn't spam)
   clearTimeout(window._updToastTimer);
   window._updToastTimer = setTimeout(() => {
     const s = state.students[i];
@@ -541,14 +530,14 @@ function addStudent() {
   if (!name) return;
   state.students.push({
     id: Date.now(), name, studentNo,
-    q1:      parseFloat(document.getElementById('newQ1').value)    || 0,
-    q2:      parseFloat(document.getElementById('newQ2').value)    || 0,
-    q3:      parseFloat(document.getElementById('newQ3').value)    || 0,
-    rec:     parseFloat(document.getElementById('newRec').value)   || 0,
-    midterm: parseFloat(document.getElementById('newMid').value)   || 0,
-    project: parseFloat(document.getElementById('newProj').value)  || 0,
-    paper:   parseFloat(document.getElementById('newPaper').value) || 0,
-    finals:  parseFloat(document.getElementById('newFinals').value)|| 0,
+    q1: parseFloat(document.getElementById('newQ1').value) || 0,
+    q2: parseFloat(document.getElementById('newQ2').value) || 0,
+    q3: parseFloat(document.getElementById('newQ3').value) || 0,
+    rec: parseFloat(document.getElementById('newRec').value) || 0,
+    midterm: parseFloat(document.getElementById('newMid').value) || 0,
+    project: parseFloat(document.getElementById('newProj').value) || 0,
+    paper: parseFloat(document.getElementById('newPaper').value) || 0,
+    finals: parseFloat(document.getElementById('newFinals').value) || 0,
   });
   ['newName', 'newStudentNo', 'newQ1', 'newQ2', 'newQ3', 'newRec', 'newMid', 'newProj', 'newPaper', 'newFinals']
     .forEach(id => document.getElementById(id).value = '');
@@ -597,3 +586,39 @@ function restoreInputs() {
 }
 
 restoreInputs();
+
+/* ── COURSE → BLOCK FILTER ── */
+// Define how many blocks each course has
+const COURSE_BLOCKS = {
+  'BSCS': ['Block 1', 'Block 2'],
+  'BSIT': ['Block 1', 'Block 2', 'Block 3', 'Block 4', 'Block 5'],
+  'BSIS': ['Block 1', 'Block 2'],
+  'BPA': ['Block 1', 'Block 2'],
+  'BTVTED': ['Block 1', 'Block 2'],
+  'BSBA': ['Block 1', 'Block 2'],
+  'BSA': ['Block 1'],
+  'BSE': ['Block 1'],
+};
+function updateBlockOptions() {
+  const courseEl = document.getElementById('course');
+  const sectionEl = document.getElementById('section');
+  if (!courseEl || !sectionEl) return;
+
+  const selectedCourse = courseEl.value;
+  const blocks = COURSE_BLOCKS[selectedCourse] || ['Block 1', 'Block 2', 'Block 3', 'Block 4', 'Block 5'];
+
+  sectionEl.innerHTML = blocks.map(b => `<option value="${b}">${b}</option>`).join('');
+}
+
+// Run whenever course changes
+document.addEventListener('DOMContentLoaded', () => {
+  const courseEl = document.getElementById('course');
+  if (courseEl) {
+    courseEl.addEventListener('change', updateBlockOptions);
+    // Set correct blocks immediately on load
+    updateBlockOptions();
+  }
+});
+
+// Fallback: also run right away in case DOM is already ready
+updateBlockOptions();
