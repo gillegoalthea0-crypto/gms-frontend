@@ -527,7 +527,17 @@ function toggleAddForm() { document.getElementById('addForm').classList.toggle('
 function addStudent() {
   const name = document.getElementById('newName').value.trim();
   const studentNo = document.getElementById('newStudentNo').value.trim() || '';
-  if (!name) return;
+  if (!name) return showAlert('Please enter a student name.', 'error');
+
+  // ── DUPLICATE CHECK ──
+  const dupName = state.students.find(s => s.name.toLowerCase() === name.toLowerCase());
+  if (dupName) return showAlert(`✗ Student name <strong>${name}</strong> already exists in the gradebook.`, 'error');
+
+  if (studentNo) {
+    const dupNo = state.students.find(s => s.studentNo && s.studentNo === studentNo);
+    if (dupNo) return showAlert(`✗ Student No. <strong>${studentNo}</strong> is already assigned to <strong>${dupNo.name}</strong>.`, 'error');
+  }
+
   state.students.push({
     id: Date.now(), name, studentNo,
     q1: parseFloat(document.getElementById('newQ1').value) || 0,
@@ -539,8 +549,10 @@ function addStudent() {
     paper: parseFloat(document.getElementById('newPaper').value) || 0,
     finals: parseFloat(document.getElementById('newFinals').value) || 0,
   });
+
   ['newName', 'newStudentNo', 'newQ1', 'newQ2', 'newQ3', 'newRec', 'newMid', 'newProj', 'newPaper', 'newFinals']
     .forEach(id => document.getElementById(id).value = '');
+
   renderTable();
   addLog('info', 'Student added', name);
 }
